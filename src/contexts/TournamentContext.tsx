@@ -1,45 +1,71 @@
 import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { Tournament, Player, GameFormat, FormatConfig, Game, Round } from '@/types';
+import { Tournament, Player, GameFormat, FormatConfig, Game, Round, TournamentHistory, PlayerOverallStats, TournamentStatus } from '@/types';
 
 interface TournamentContextType {
-    tournament: Tournament;
-    addPlayer: (name: string, number: number) => void;
+    currentTournament: Tournament | null;
+    tournamentHistory: TournamentHistory;
+    addPlayer: (name: string, number: number, skillRating?: number) => void;
     removePlayer: (id: string) => void;
     togglePlayerActive: (id: string) => void;
+    updatePlayerSkillRating: (id: string, skillRating: number) => void;
+    renamePlayer: (id: string, newName: string) => void;
     updateFormatConfig: (format: GameFormat, gamesCount: number) => void;
-    startTournament: () => void;
+    startTournament: (onNavigateToGames?: () => void) => void;
+    endTournament: () => void;
+    createNewTournament: (name: string) => void;
     resetTournament: () => void;
     generateNextRound: () => void;
     updateGameScore: (gameId: string, scoreA: number, scoreB: number) => void;
     setFairRoll: (fairRoll: boolean) => void;
+    getPlayerOverallStats: () => PlayerOverallStats[];
+    getHistoricalPlayerStats: () => PlayerOverallStats[];
 }
 
 type TournamentAction =
-    | { type: 'ADD_PLAYER'; payload: { name: string; number: number } }
+    | { type: 'ADD_PLAYER'; payload: { name: string; number: number; skillRating?: number } }
     | { type: 'REMOVE_PLAYER'; payload: string }
     | { type: 'TOGGLE_PLAYER_ACTIVE'; payload: string }
+    | { type: 'UPDATE_PLAYER_SKILL_RATING'; payload: { id: string; skillRating: number } }
+    | { type: 'RENAME_PLAYER'; payload: { id: string; newName: string } }
     | { type: 'UPDATE_FORMAT_CONFIG'; payload: { format: GameFormat; gamesCount: number } }
     | { type: 'START_TOURNAMENT' }
+    | { type: 'END_TOURNAMENT' }
+    | { type: 'CREATE_NEW_TOURNAMENT'; payload: { name: string } }
     | { type: 'RESET_TOURNAMENT' }
     | { type: 'GENERATE_NEXT_ROUND' }
     | { type: 'UPDATE_GAME_SCORE'; payload: { gameId: string; scoreA: number; scoreB: number } }
     | { type: 'SET_FAIR_ROLL'; payload: boolean }
-    | { type: 'LOAD_TOURNAMENT'; payload: Tournament };
+    | { type: 'LOAD_TOURNAMENT'; payload: Tournament }
+    | { type: 'LOAD_HISTORY'; payload: TournamentHistory }
+    | { type: 'LOAD_HISTORY'; payload: TournamentHistory };
 
 const defaultPlayers: Player[] = [
-    { id: '1', name: 'Alex', number: 1, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '2', name: 'Ben', number: 2, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '3', name: 'Charlie', number: 3, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '4', name: 'David', number: 4, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '5', name: 'Emil', number: 5, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '6', name: 'Felix', number: 6, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '7', name: 'Georg', number: 7, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '8', name: 'Hans', number: 8, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '9', name: 'Ivan', number: 9, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '10', name: 'Jakob', number: 10, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '11', name: 'Klaus', number: 11, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '12', name: 'Leon', number: 12, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
-    { id: '13', name: 'Max', number: 13, points: 0, active: true, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '1', name: 'Leon Krolop', number: 1, points: 0, active: true, skillRating: 1, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '2', name: 'Henry Engstler', number: 2, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '3', name: 'Nico Grams', number: 3, points: 0, active: true, skillRating: 5, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '4', name: 'Alois Hage', number: 4, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '5', name: 'Ben Stock', number: 5, points: 0, active: true, skillRating: 2, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '6', name: 'Linus Haneberg', number: 6, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '7', name: 'Tim Zauner', number: 7, points: 0, active: true, skillRating: 2, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '8', name: 'Jannis Mayer', number: 8, points: 0, active: true, skillRating: 2, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '9', name: 'Finn Nuschele', number: 9, points: 0, active: true, skillRating: 5, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '10', name: 'Tizian Bellmann', number: 10, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '11', name: 'Sebastian Betz', number: 11, points: 0, active: true, skillRating: 5, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '12', name: 'Vinzenz Herz', number: 12, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '13', name: 'Tajo Dietrich', number: 13, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '14', name: 'Paul Querbach', number: 14, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '15', name: 'Emil Richter', number: 15, points: 0, active: true, skillRating: 5, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '16', name: 'Korbinian Koch', number: 16, points: 0, active: true, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '17', name: 'Leni Egger', number: 17, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '18', name: 'Lorik Mazrekaj', number: 18, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '19', name: 'Niklas Hauf', number: 19, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '20', name: 'Samuel Noak', number: 20, points: 0, active: true, skillRating: 4, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '21', name: 'Arman Tajmohammad', number: 21, points: 0, active: false, skillRating: 1, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '22', name: 'Fritz Lehmann', number: 22, points: 0, active: false, skillRating: 5, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '23', name: 'Phillip Herz', number: 23, points: 0, active: false, skillRating: 2, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '24', name: 'Sigi Kleinheinz', number: 24, points: 0, active: false, skillRating: 1, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '25', name: 'Luca Weigl', number: 25, points: 0, active: false, skillRating: 2, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
+    { id: '26', name: 'Timo Spatz', number: 26, points: 0, active: false, skillRating: 3, gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 } },
 ];
 
 const defaultFormatConfigs: FormatConfig[] = [
@@ -48,7 +74,15 @@ const defaultFormatConfigs: FormatConfig[] = [
     { format: '4+1vs4+1', gamesCount: 1, playersPerTeam: 5 },
 ];
 
+function generateId(): string {
+    return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
 const initialTournament: Tournament = {
+    id: generateId(),
+    name: 'Neues Turnier',
+    createdAt: new Date(),
+    status: 'draft' as TournamentStatus,
     gamesPerRound: 5,
     rounds: [],
     currentRound: 0,
@@ -58,8 +92,23 @@ const initialTournament: Tournament = {
     fairRoll: true,
 };
 
-function generateId(): string {
-    return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+const initialTournamentHistory: TournamentHistory = {
+    tournaments: [],
+    currentTournamentId: null,
+};
+
+function historyReducer(state: TournamentHistory, action: { type: 'ADD_TOURNAMENT'; payload: Tournament } | { type: 'LOAD_HISTORY'; payload: TournamentHistory }): TournamentHistory {
+    switch (action.type) {
+        case 'ADD_TOURNAMENT':
+            return {
+                ...state,
+                tournaments: [...state.tournaments, action.payload]
+            };
+        case 'LOAD_HISTORY':
+            return action.payload;
+        default:
+            return state;
+    }
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -77,14 +126,19 @@ function createFairTeams(players: Player[], playersPerTeam: number, gamesCount: 
     let shuffledPlayers: Player[];
 
     if (fairRoll) {
-        const groupedByPoints = activePlayers.reduce((groups, player) => {
-            const points = player.points;
-            if (!groups[points]) groups[points] = [];
-            groups[points].push(player);
+        const playersWithCombinedRating = activePlayers.map(player => ({
+            ...player,
+            combinedRating: player.points + (player.skillRating * 2)
+        }));
+
+        const groupedByCombinedRating = playersWithCombinedRating.reduce((groups, player) => {
+            const rating = player.combinedRating;
+            if (!groups[rating]) groups[rating] = [];
+            groups[rating].push(player);
             return groups;
         }, {} as Record<number, Player[]>);
 
-        const sortedGroups = Object.entries(groupedByPoints)
+        const sortedGroups = Object.entries(groupedByCombinedRating)
             .sort(([a], [b]) => parseInt(b) - parseInt(a))
             .map(([, players]) => shuffleArray(players));
 
@@ -187,6 +241,7 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 number: action.payload.number,
                 points: 0,
                 active: true,
+                skillRating: action.payload.skillRating ?? 3,
                 gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 },
             };
             return { ...state, players: [...state.players, newPlayer] };
@@ -200,6 +255,22 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 ...state,
                 players: state.players.map(p =>
                     p.id === action.payload ? { ...p, active: !p.active } : p
+                ),
+            };
+
+        case 'UPDATE_PLAYER_SKILL_RATING':
+            return {
+                ...state,
+                players: state.players.map(p =>
+                    p.id === action.payload.id ? { ...p, skillRating: action.payload.skillRating } : p
+                ),
+            };
+
+        case 'RENAME_PLAYER':
+            return {
+                ...state,
+                players: state.players.map(p =>
+                    p.id === action.payload.id ? { ...p, name: action.payload.newName } : p
                 ),
             };
 
@@ -217,13 +288,34 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
             const allGames: Game[] = [];
             let roundNumber = 1;
 
-            state.formatConfigs.forEach(config => {
+            const activePlayers = state.players.filter(p => p.active);
+            const activeFormatConfigs = state.formatConfigs.filter(config => config.gamesCount > 0);
+
+            if (activeFormatConfigs.length === 0) {
+                return state;
+            }
+
+            let usedPlayerIds: Set<string> = new Set();
+            let availablePlayers = [...activePlayers];
+
+            activeFormatConfigs.forEach(config => {
                 if (config.gamesCount > 0) {
-                    const games = createFairTeams(state.players, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
-                    games.forEach(game => {
-                        game.round = roundNumber;
-                        allGames.push(game);
-                    });
+                    const playersNeededForFormat = config.playersPerTeam * 2 * config.gamesCount;
+                    const formatPlayers = availablePlayers.slice(0, playersNeededForFormat);
+
+                    if (formatPlayers.length >= config.playersPerTeam * 2) {
+                        const games = createFairTeams(formatPlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
+                        games.forEach(game => {
+                            game.round = roundNumber;
+                            allGames.push(game);
+
+                            [...game.teamA, ...game.teamB].forEach(player => {
+                                usedPlayerIds.add(player.id);
+                            });
+                        });
+
+                        availablePlayers = availablePlayers.filter(p => !usedPlayerIds.has(p.id));
+                    }
                 }
             });
 
@@ -257,6 +349,7 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 rounds: [round],
                 currentRound: 1,
                 players: updatedPlayers,
+                status: 'running' as TournamentStatus,
             };
         }
 
@@ -264,13 +357,34 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
             const allGames: Game[] = [];
             const nextRoundNumber = state.rounds.length + 1;
 
-            state.formatConfigs.forEach(config => {
+            const activePlayers = state.players.filter(p => p.active);
+            const activeFormatConfigs = state.formatConfigs.filter(config => config.gamesCount > 0);
+
+            if (activeFormatConfigs.length === 0) {
+                return state;
+            }
+
+            let usedPlayerIds: Set<string> = new Set();
+            let availablePlayers = [...activePlayers];
+
+            activeFormatConfigs.forEach(config => {
                 if (config.gamesCount > 0) {
-                    const games = createFairTeams(state.players, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
-                    games.forEach(game => {
-                        game.round = nextRoundNumber;
-                        allGames.push(game);
-                    });
+                    const playersNeededForFormat = config.playersPerTeam * 2 * config.gamesCount;
+                    const formatPlayers = availablePlayers.slice(0, playersNeededForFormat);
+
+                    if (formatPlayers.length >= config.playersPerTeam * 2) {
+                        const games = createFairTeams(formatPlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
+                        games.forEach(game => {
+                            game.round = nextRoundNumber;
+                            allGames.push(game);
+
+                            [...game.teamA, ...game.teamB].forEach(player => {
+                                usedPlayerIds.add(player.id);
+                            });
+                        });
+
+                        availablePlayers = availablePlayers.filter(p => !usedPlayerIds.has(p.id));
+                    }
                 }
             });
 
@@ -341,19 +455,51 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
     }
 }
 
+function migrateTournamentData(tournament: any): Tournament {
+    const migratedPlayers = tournament.players.map((player: any) => ({
+        ...player,
+        skillRating: player.skillRating ?? 3
+    }));
+
+    return {
+        ...tournament,
+        players: migratedPlayers,
+        createdAt: new Date(tournament.createdAt),
+        endedAt: tournament.endedAt ? new Date(tournament.endedAt) : undefined
+    };
+}
+
 const TournamentContext = createContext<TournamentContextType | undefined>(undefined);
 
 export function TournamentProvider({ children }: { children: ReactNode }) {
     const [tournament, dispatch] = useReducer(tournamentReducer, initialTournament);
+    const [history, historyDispatch] = useReducer(historyReducer, initialTournamentHistory);
 
     useEffect(() => {
         const saved = localStorage.getItem('holland-turnier');
+        const savedHistory = localStorage.getItem('holland-turnier-history');
+
         if (saved) {
             try {
                 const parsedTournament = JSON.parse(saved);
-                dispatch({ type: 'LOAD_TOURNAMENT', payload: parsedTournament });
+                const migratedTournament = migrateTournamentData(parsedTournament);
+                dispatch({ type: 'LOAD_TOURNAMENT', payload: migratedTournament });
             } catch (error) {
                 console.error('Failed to load tournament from localStorage:', error);
+            }
+        }
+
+        if (savedHistory) {
+            try {
+                const parsedHistory = JSON.parse(savedHistory);
+                // Migrate dates in history
+                const migratedHistory = {
+                    ...parsedHistory,
+                    tournaments: parsedHistory.tournaments.map((t: any) => migrateTournamentData(t))
+                };
+                historyDispatch({ type: 'LOAD_HISTORY', payload: migratedHistory });
+            } catch (error) {
+                console.error('Failed to load history from localStorage:', error);
             }
         }
     }, []);
@@ -362,8 +508,12 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('holland-turnier', JSON.stringify(tournament));
     }, [tournament]);
 
-    const addPlayer = (name: string, number: number) => {
-        dispatch({ type: 'ADD_PLAYER', payload: { name, number } });
+    useEffect(() => {
+        localStorage.setItem('holland-turnier-history', JSON.stringify(history));
+    }, [history]);
+
+    const addPlayer = (name: string, number: number, skillRating?: number) => {
+        dispatch({ type: 'ADD_PLAYER', payload: { name, number, skillRating } });
     };
 
     const removePlayer = (id: string) => {
@@ -374,12 +524,58 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'TOGGLE_PLAYER_ACTIVE', payload: id });
     };
 
+    const updatePlayerSkillRating = (id: string, skillRating: number) => {
+        dispatch({ type: 'UPDATE_PLAYER_SKILL_RATING', payload: { id, skillRating } });
+    };
+
+    const renamePlayer = (id: string, newName: string) => {
+        dispatch({ type: 'RENAME_PLAYER', payload: { id, newName } });
+    };
+
     const updateFormatConfig = (format: GameFormat, gamesCount: number) => {
         dispatch({ type: 'UPDATE_FORMAT_CONFIG', payload: { format, gamesCount } });
     };
 
-    const startTournament = () => {
+    const startTournament = (onNavigateToGames?: () => void) => {
         dispatch({ type: 'START_TOURNAMENT' });
+        if (onNavigateToGames) {
+            onNavigateToGames();
+        }
+    };
+
+    const endTournament = () => {
+        const completedTournament = {
+            ...tournament,
+            status: 'completed' as TournamentStatus,
+            endedAt: new Date()
+        };
+
+        // Add completed tournament to history
+        historyDispatch({ type: 'ADD_TOURNAMENT', payload: completedTournament });
+
+        const newTournament = {
+            ...initialTournament,
+            id: generateId(),
+            name: `Turnier ${new Date().toLocaleDateString('de-DE')}`,
+            createdAt: new Date(),
+            players: tournament.players.map(p => ({
+                ...p,
+                points: 0,
+                gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 }
+            }))
+        };
+        dispatch({ type: 'LOAD_TOURNAMENT', payload: newTournament });
+    };
+
+    const createNewTournament = (name: string) => {
+        const newTournament = {
+            ...initialTournament,
+            id: generateId(),
+            name: name,
+            createdAt: new Date(),
+            players: tournament?.players || defaultPlayers
+        };
+        dispatch({ type: 'LOAD_TOURNAMENT', payload: newTournament });
     };
 
     const resetTournament = () => {
@@ -398,19 +594,91 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'SET_FAIR_ROLL', payload: fairRoll });
     };
 
+    const getPlayerOverallStats = (): PlayerOverallStats[] => {
+        if (!tournament) return [];
+
+        return tournament.players.map(player => ({
+            playerId: player.id,
+            playerName: player.name,
+            playerNumber: player.number,
+            skillRating: player.skillRating,
+            totalPoints: player.points,
+            totalGames: player.gamesPlayed.total,
+            tournamentsParticipated: 1, // For now, just current tournament
+            averagePointsPerGame: player.gamesPlayed.total > 0 ? player.points / player.gamesPlayed.total : 0,
+            averagePointsPerTournament: player.points,
+            gamesPlayedByFormat: {
+                "2vs2": player.gamesPlayed["2vs2"],
+                "3vs3": player.gamesPlayed["3vs3"],
+                "4+1vs4+1": player.gamesPlayed["4+1vs4+1"]
+            }
+        }));
+    };
+
+    const getHistoricalPlayerStats = (): PlayerOverallStats[] => {
+        // Combine current tournament with historical tournaments
+        const allTournaments = tournament ? [...history.tournaments, tournament] : history.tournaments;
+        const playerStatsMap = new Map<string, PlayerOverallStats>();
+
+        allTournaments.forEach(t => {
+            t.players.forEach(player => {
+                const existingStats = playerStatsMap.get(player.id);
+
+                if (existingStats) {
+                    // Update existing stats
+                    existingStats.totalPoints += player.points;
+                    existingStats.totalGames += player.gamesPlayed.total;
+                    existingStats.tournamentsParticipated += 1;
+                    existingStats.gamesPlayedByFormat["2vs2"] += player.gamesPlayed["2vs2"];
+                    existingStats.gamesPlayedByFormat["3vs3"] += player.gamesPlayed["3vs3"];
+                    existingStats.gamesPlayedByFormat["4+1vs4+1"] += player.gamesPlayed["4+1vs4+1"];
+                    existingStats.averagePointsPerGame = existingStats.totalGames > 0 ? existingStats.totalPoints / existingStats.totalGames : 0;
+                    existingStats.averagePointsPerTournament = existingStats.totalPoints / existingStats.tournamentsParticipated;
+                } else {
+                    // Create new stats
+                    playerStatsMap.set(player.id, {
+                        playerId: player.id,
+                        playerName: player.name,
+                        playerNumber: player.number,
+                        skillRating: player.skillRating,
+                        totalPoints: player.points,
+                        totalGames: player.gamesPlayed.total,
+                        tournamentsParticipated: 1,
+                        averagePointsPerGame: player.gamesPlayed.total > 0 ? player.points / player.gamesPlayed.total : 0,
+                        averagePointsPerTournament: player.points,
+                        gamesPlayedByFormat: {
+                            "2vs2": player.gamesPlayed["2vs2"],
+                            "3vs3": player.gamesPlayed["3vs3"],
+                            "4+1vs4+1": player.gamesPlayed["4+1vs4+1"]
+                        }
+                    });
+                }
+            });
+        });
+
+        return Array.from(playerStatsMap.values());
+    };
+
     return (
         <TournamentContext.Provider
             value={{
-                tournament,
+                currentTournament: tournament,
+                tournamentHistory: history,
                 addPlayer,
                 removePlayer,
                 togglePlayerActive,
+                updatePlayerSkillRating,
+                renamePlayer,
                 updateFormatConfig,
                 startTournament,
+                endTournament,
+                createNewTournament,
                 resetTournament,
                 generateNextRound,
                 updateGameScore,
                 setFairRoll,
+                getPlayerOverallStats,
+                getHistoricalPlayerStats,
             }}
         >
             {children}

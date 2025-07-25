@@ -1,20 +1,43 @@
+import { useState } from 'react';
 import { useTournament } from '@/contexts/TournamentContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger
+} from '@/components/ui/dialog';
 import { GameFormat } from '@/types';
-import { Play, RotateCcw, Settings, AlertTriangle } from 'lucide-react';
+import { Play, RotateCcw, Settings, AlertTriangle, Trophy, Plus, Minus } from 'lucide-react';
 
-export function Tournament() {
+interface TournamentProps {
+    onNavigateToGames?: () => void;
+}
+
+export function Tournament({ onNavigateToGames }: TournamentProps) {
+    const [resetDialogOpen, setResetDialogOpen] = useState(false);
+    const [endDialogOpen, setEndDialogOpen] = useState(false);
+
     const {
-        tournament,
+        currentTournament,
         updateFormatConfig,
         startTournament,
+        endTournament,
         resetTournament,
         setFairRoll
     } = useTournament();
 
+    if (!currentTournament) {
+        return <div>Loading...</div>;
+    }
+
+    const tournament = currentTournament;
     const activePlayers = tournament.players.filter(p => p.active);
 
     const getMinPlayersForFormat = (format: GameFormat): number => {
@@ -43,6 +66,30 @@ export function Tournament() {
         }
     };
 
+    const hasGamesInProgress = () => {
+        return tournament.rounds.some(round =>
+            round.games.some(game => game.scoreA !== null || game.scoreB !== null)
+        );
+    };
+
+    const handleResetTournament = () => {
+        resetTournament();
+        setResetDialogOpen(false);
+    };
+
+    const handleEndTournament = () => {
+        endTournament();
+        setEndDialogOpen(false);
+    };
+
+    const adjustFormatCount = (format: GameFormat, delta: number) => {
+        const config = tournament.formatConfigs.find(c => c.format === format);
+        if (config) {
+            const newCount = Math.max(0, Math.min(10, config.gamesCount + delta));
+            updateFormatConfig(format, newCount);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <Card>
@@ -61,7 +108,7 @@ export function Tournament() {
                             <div>
                                 <h4 className="font-medium">Fair Roll aktivieren</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    Intelligente Teamverteilung basierend auf Punktestand
+                                    Intelligente Teamverteilung: Gruppiert Spieler nach kombinierter Bewertung (Punkte + Fähigkeitswert×2) und verteilt sie gleichmäßig auf Teams für ausgeglichene Spiele. Deaktiviert = zufällige Aufteilung.
                                 </p>
                             </div>
                             <Switch
@@ -82,15 +129,35 @@ export function Tournament() {
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">Spiele:</span>
-                                        <Input
-                                            type="number"
-                                            min="0"
-                                            max="10"
-                                            value={config.gamesCount}
-                                            onChange={(e) => updateFormatConfig(config.format, parseInt(e.target.value) || 0)}
-                                            className="w-16 text-center"
-                                            disabled={tournament.started}
-                                        />
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                onClick={() => adjustFormatCount(config.format, -1)}
+                                                disabled={tournament.started || config.gamesCount <= 0}
+                                            >
+                                                <Minus className="h-3 w-3" />
+                                            </Button>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                max="10"
+                                                value={config.gamesCount}
+                                                onChange={(e) => updateFormatConfig(config.format, parseInt(e.target.value) || 0)}
+                                                className="w-16 text-center"
+                                                disabled={tournament.started}
+                                            />
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                onClick={() => adjustFormatCount(config.format, 1)}
+                                                disabled={tournament.started || config.gamesCount >= 10}
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -116,68 +183,107 @@ export function Tournament() {
                                     Mindestens {getTotalMinPlayers()} Spieler benötigt
                                 </p>
                             </div>
-                            <div className="flex gap-2">
-                                {tournament.started ? (
-                                    <Button
-                                        variant="destructive"
-                                        onClick={resetTournament}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <RotateCcw className="h-4 w-4" />
-                                        Turnier zurücksetzen
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        onClick={startTournament}
-                                        disabled={!canStartTournament()}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <Play className="h-4 w-4" />
-                                        Turnier starten
-                                    </Button>
-                                )}
-                            </div>
                         </div>
 
-                        {!canStartTournament() && !tournament.started && (
-                            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                                    <div>
-                                        <h5 className="font-medium text-amber-800 dark:text-amber-200 mb-1">
-                                            Turnier kann nicht gestartet werden
-                                        </h5>
-                                        <ul className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
-                                            {activePlayers.length < getTotalMinPlayers() && (
-                                                <li>• Nicht genügend aktive Spieler</li>
-                                            )}
-                                            {!tournament.formatConfigs.some(config => config.gamesCount > 0) && (
-                                                <li>• Mindestens ein Spielformat muss konfiguriert sein</li>
-                                            )}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <div className="flex gap-2">
+                            <Button
+                                onClick={() => startTournament(onNavigateToGames)}
+                                disabled={!canStartTournament() || tournament.started}
+                                className="flex-1"
+                            >
+                                <Play className="h-4 w-4 mr-2" />
+                                Turnier starten
+                            </Button>
 
-                        {tournament.started && (
-                            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                                <div className="flex items-center gap-3">
-                                    <Play className="h-5 w-5 text-green-600" />
-                                    <div>
-                                        <h5 className="font-medium text-green-800 dark:text-green-200">
-                                            Turnier läuft
-                                        </h5>
-                                        <p className="text-sm text-green-700 dark:text-green-300">
-                                            Runde {tournament.currentRound} • {tournament.rounds.length} Runde(n) gespielt
-                                        </p>
-                                    </div>
-                                </div>
+                            <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        disabled={!tournament.started}
+                                    >
+                                        <RotateCcw className="h-4 w-4 mr-2" />
+                                        Reset
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Turnier zurücksetzen</DialogTitle>
+                                        <DialogDescription>
+                                            Möchten Sie das aktuelle Turnier wirklich zurücksetzen? Alle Spiele und Ergebnisse gehen verloren.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Abbrechen</Button>
+                                        <Button onClick={handleResetTournament}>Zurücksetzen</Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+
+                        {tournament.started && hasGamesInProgress() && (
+                            <div className="mt-4">
+                                <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="w-full">
+                                            <Trophy className="h-4 w-4 mr-2" />
+                                            Turnier beenden
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Turnier beenden</DialogTitle>
+                                            <DialogDescription>
+                                                Möchten Sie das aktuelle Turnier beenden? Es wird in der Historie gespeichert und Sie können ein neues Turnier starten.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setEndDialogOpen(false)}>Abbrechen</Button>
+                                            <Button onClick={handleEndTournament}>Turnier beenden</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
                             </div>
                         )}
                     </div>
                 </CardContent>
             </Card>
+
+            {!canStartTournament() && !tournament.started && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div>
+                            <h5 className="font-medium text-amber-800 dark:text-amber-200 mb-1">
+                                Turnier kann nicht gestartet werden
+                            </h5>
+                            <ul className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                                {activePlayers.length < getTotalMinPlayers() && (
+                                    <li>• Nicht genügend aktive Spieler ({activePlayers.length} von {getTotalMinPlayers()} benötigt)</li>
+                                )}
+                                {!tournament.formatConfigs.some(config => config.gamesCount > 0) && (
+                                    <li>• Mindestens ein Spielformat muss konfiguriert sein</li>
+                                )}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {tournament.started && (
+                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                        <Play className="h-5 w-5 text-green-600" />
+                        <div>
+                            <h5 className="font-medium text-green-800 dark:text-green-200">
+                                Turnier läuft - {tournament.name}
+                            </h5>
+                            <p className="text-sm text-green-700 dark:text-green-300">
+                                Runde {tournament.currentRound} • {tournament.rounds.length} Runde(n) gespielt • Erstellt: {new Date(tournament.createdAt).toLocaleDateString('de-DE')}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 } 
