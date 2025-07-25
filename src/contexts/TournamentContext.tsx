@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useReducer, useEffect, useState, ReactNode } from 'react';
 import { Tournament, Player, GameFormat, FormatConfig, Game, Round, TournamentHistory, PlayerOverallStats, TournamentStatus } from '@/types';
 
 interface TournamentContextType {
@@ -437,6 +437,9 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
         case 'RESET_TOURNAMENT':
             return {
                 ...initialTournament,
+                id: state.id,
+                name: state.name,
+                createdAt: state.createdAt,
                 players: state.players.map(p => ({
                     ...p,
                     points: 0,
@@ -456,17 +459,35 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
 }
 
 function migrateTournamentData(tournament: any): Tournament {
-    const migratedPlayers = tournament.players.map((player: any) => ({
-        ...player,
-        skillRating: player.skillRating ?? 3
-    }));
+    try {
+        const migratedPlayers = (tournament.players || []).map((player: any) => ({
+            id: player.id || generateId(),
+            name: player.name || 'Unknown Player',
+            number: player.number || 0,
+            points: player.points || 0,
+            active: player.active !== undefined ? player.active : true,
+            skillRating: player.skillRating ?? 3,
+            gamesPlayed: player.gamesPlayed || { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 }
+        }));
 
-    return {
-        ...tournament,
-        players: migratedPlayers,
-        createdAt: new Date(tournament.createdAt),
-        endedAt: tournament.endedAt ? new Date(tournament.endedAt) : undefined
-    };
+        return {
+            id: tournament.id || generateId(),
+            name: tournament.name || 'Unbekanntes Turnier',
+            createdAt: tournament.createdAt ? new Date(tournament.createdAt) : new Date(),
+            endedAt: tournament.endedAt ? new Date(tournament.endedAt) : undefined,
+            status: tournament.status || 'draft',
+            gamesPerRound: tournament.gamesPerRound || 5,
+            rounds: tournament.rounds || [],
+            currentRound: tournament.currentRound || 0,
+            players: migratedPlayers,
+            started: tournament.started || false,
+            formatConfigs: tournament.formatConfigs || defaultFormatConfigs,
+            fairRoll: tournament.fairRoll !== undefined ? tournament.fairRoll : true
+        };
+    } catch (error) {
+        console.error('Migration error:', error);
+        throw error;
+    }
 }
 
 const TournamentContext = createContext<TournamentContextType | undefined>(undefined);
@@ -475,41 +496,88 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     const [tournament, dispatch] = useReducer(tournamentReducer, initialTournament);
     const [history, historyDispatch] = useReducer(historyReducer, initialTournamentHistory);
 
-    useEffect(() => {
-        const saved = localStorage.getItem('holland-turnier');
-        const savedHistory = localStorage.getItem('holland-turnier-history');
-
-        if (saved) {
-            try {
-                const parsedTournament = JSON.parse(saved);
-                const migratedTournament = migrateTournamentData(parsedTournament);
-                dispatch({ type: 'LOAD_TOURNAMENT', payload: migratedTournament });
-            } catch (error) {
-                console.error('Failed to load tournament from localStorage:', error);
-            }
-        }
-
-        if (savedHistory) {
-            try {
-                const parsedHistory = JSON.parse(savedHistory);
-                // Migrate dates in history
-                const migratedHistory = {
-                    ...parsedHistory,
-                    tournaments: parsedHistory.tournaments.map((t: any) => migrateTournamentData(t))
-                };
-                historyDispatch({ type: 'LOAD_HISTORY', payload: migratedHistory });
-            } catch (error) {
-                console.error('Failed to load history from localStorage:', error);
-            }
-        }
-    }, []);
+    const [hasLoaded, setHasLoaded] = useState(false);
 
     useEffect(() => {
-        localStorage.setItem('holland-turnier', JSON.stringify(tournament));
+        if (hasLoaded) return;
+
+        const loadData = () => {
+            const saved = localStorage.getItem('holland-turnier');
+            const savedHistory = localStorage.getItem('holland-turnier-history');
+
+            console.log('Loading data from localStorage...');
+            console.log('Tournament data:', saved ? 'found' : 'not found');
+            console.log('History data:', savedHistory ? 'found' : 'not found');
+
+            if (saved) {
+                try {
+                    const parsedTournament = JSON.parse(saved);
+                    console.log('Parsed tournament:', parsedTournament);
+
+                    if (parsedTournament && parsedTournament.id) {
+                        const migratedTournament = migrateTournamentData(parsedTournament);
+                        console.log('Migrated tournament:', migratedTournament);
+                        dispatch({ type: 'LOAD_TOURNAMENT', payload: migratedTournament });
+                    }
+                } catch (error) {
+                    console.error('Failed to load tournament from localStorage:', error);
+                    localStorage.removeItem('holland-turnier');
+                }
+            }
+
+            if (savedHistory) {
+                try {
+                    const parsedHistory = JSON.parse(savedHistory);
+                    console.log('Parsed history:', parsedHistory);
+
+                    if (parsedHistory && Array.isArray(parsedHistory.tournaments)) {
+                        const migratedHistory = {
+                            ...parsedHistory,
+                            tournaments: parsedHistory.tournaments.map((t: any) => migrateTournamentData(t))
+                        };
+                        console.log('Migrated history:', migratedHistory);
+                        historyDispatch({ type: 'LOAD_HISTORY', payload: migratedHistory });
+                    }
+                } catch (error) {
+                    console.error('Failed to load history from localStorage:', error);
+                    localStorage.removeItem('holland-turnier-history');
+                }
+            }
+
+            setHasLoaded(true);
+        };
+
+        loadData();
+    }, [hasLoaded]);
+
+    useEffect(() => {
+        try {
+            const tournamentData = JSON.stringify(tournament, (_, value) => {
+                if (value instanceof Date) {
+                    return value.toISOString();
+                }
+                return value;
+            });
+            localStorage.setItem('holland-turnier', tournamentData);
+            console.log('Saved tournament to localStorage:', tournament.name, tournament.id);
+        } catch (error) {
+            console.error('Failed to save tournament to localStorage:', error);
+        }
     }, [tournament]);
 
     useEffect(() => {
-        localStorage.setItem('holland-turnier-history', JSON.stringify(history));
+        try {
+            const historyData = JSON.stringify(history, (_, value) => {
+                if (value instanceof Date) {
+                    return value.toISOString();
+                }
+                return value;
+            });
+            localStorage.setItem('holland-turnier-history', historyData);
+            console.log('Saved history to localStorage:', history.tournaments.length, 'tournaments');
+        } catch (error) {
+            console.error('Failed to save history to localStorage:', error);
+        }
     }, [history]);
 
     const addPlayer = (name: string, number: number, skillRating?: number) => {
@@ -553,18 +621,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         // Add completed tournament to history
         historyDispatch({ type: 'ADD_TOURNAMENT', payload: completedTournament });
 
-        const newTournament = {
-            ...initialTournament,
-            id: generateId(),
-            name: `Turnier ${new Date().toLocaleDateString('de-DE')}`,
-            createdAt: new Date(),
-            players: tournament.players.map(p => ({
-                ...p,
-                points: 0,
-                gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 }
-            }))
-        };
-        dispatch({ type: 'LOAD_TOURNAMENT', payload: newTournament });
+        // Reset current tournament instead of creating new one
+        dispatch({ type: 'RESET_TOURNAMENT' });
     };
 
     const createNewTournament = (name: string) => {

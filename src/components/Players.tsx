@@ -11,8 +11,7 @@ import {
     DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
-    DialogTrigger
+    DialogTitle
 } from '@/components/ui/dialog';
 import { Trash2, UserPlus, Star, Search, Filter, ArrowUpDown, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import {
@@ -38,7 +37,7 @@ export function Players() {
     const [addPlayerExpanded, setAddPlayerExpanded] = useState(false);
     const [filtersExpanded, setFiltersExpanded] = useState(false);
     const [activePlayersExpanded, setActivePlayersExpanded] = useState(true);
-    const [inactivePlayersExpanded, setInactivePlayersExpanded] = useState(false);
+    const [inactivePlayersExpanded, setInactivePlayersExpanded] = useState(true);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [skillRatingFilter, setSkillRatingFilter] = useState<string>('all');
@@ -224,20 +223,31 @@ export function Players() {
                 <Collapsible open={filtersExpanded} onOpenChange={setFiltersExpanded}>
                     <CollapsibleTrigger asChild>
                         <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                            <CardTitle className="flex items-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <Filter className="h-5 w-5" />
-                                    Filter & Suche
+                                    <Filter className="h-4 w-4" />
+                                    <CardTitle className="text-lg">Filter & Sortierung</CardTitle>
                                 </div>
-                                {filtersExpanded ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                ) : (
-                                    <ChevronRight className="h-4 w-4" />
-                                )}
-                            </CardTitle>
-                            <CardDescription>
-                                Suche, filtere und sortiere Spieler nach verschiedenen Kriterien
-                            </CardDescription>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-sm text-muted-foreground">
+                                        {searchTerm && <span className="mr-2">Suche: "{searchTerm}"</span>}
+                                        {skillRatingFilter !== 'all' && (
+                                            <span className="mr-2">
+                                                Fähigkeit: {'⭐'.repeat(parseInt(skillRatingFilter))}
+                                            </span>
+                                        )}
+                                        <span>
+                                            Sortiert nach: {
+                                                sortBy === 'number' ? 'Trikotnummer' :
+                                                    sortBy === 'name' ? 'Name' :
+                                                        sortBy === 'points' ? 'Punkte' :
+                                                            'Fähigkeitsstufe'
+                                            } ({sortDirection === 'asc' ? 'aufsteigend' : 'absteigend'})
+                                        </span>
+                                    </div>
+                                    <ChevronDown className={`h-4 w-4 transition-transform ${filtersExpanded ? 'rotate-180' : ''}`} />
+                                </div>
+                            </div>
                         </CardHeader>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -256,7 +266,7 @@ export function Players() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
                                     <Select value={skillRatingFilter} onValueChange={setSkillRatingFilter}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Fähigkeitsstufe" />
+                                            <SelectValue placeholder="Fähigkeitsstufe filtern" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">Alle Fähigkeitsstufen</SelectItem>
@@ -270,7 +280,7 @@ export function Players() {
 
                                     <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Sortieren nach" />
+                                            <SelectValue placeholder="Sortieren nach..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="number">Trikotnummer</SelectItem>
@@ -286,8 +296,7 @@ export function Players() {
                                         className="flex items-center gap-2 col-span-1 sm:col-span-2 lg:col-span-1"
                                     >
                                         <ArrowUpDown className="h-4 w-4" />
-                                        <span className="hidden sm:inline">{sortDirection === 'asc' ? 'Aufsteigend' : 'Absteigend'}</span>
-                                        <span className="sm:hidden">{sortDirection === 'asc' ? 'A-Z' : 'Z-A'}</span>
+                                        {sortDirection === 'asc' ? 'Aufsteigend' : 'Absteigend'}
                                     </Button>
                                 </div>
                             </div>
@@ -529,7 +538,7 @@ export function Players() {
                 </div>
             )}
 
-            <Dialog open={!!playerToDelete} onOpenChange={setPlayerToDelete}>
+            <Dialog open={!!playerToDelete} onOpenChange={(open) => !open && setPlayerToDelete(null)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Spieler löschen</DialogTitle>
