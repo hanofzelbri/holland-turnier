@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: holland-turnier
+    buildCommand: pnpm install && pnpm run build
+    staticPublishPath: ./dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /static/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
