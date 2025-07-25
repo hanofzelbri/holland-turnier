@@ -14,7 +14,7 @@ import {
     DialogTrigger
 } from '@/components/ui/dialog';
 import { GameFormat } from '@/types';
-import { Play, RotateCcw, Settings, AlertTriangle, Trophy, Plus, Minus } from 'lucide-react';
+import { Play, RotateCcw, Settings, AlertTriangle, Trophy, Plus, Minus, Edit2, Check, X } from 'lucide-react';
 
 interface TournamentProps {
     onNavigateToGames?: () => void;
@@ -23,6 +23,8 @@ interface TournamentProps {
 export function Tournament({ onNavigateToGames }: TournamentProps) {
     const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [endDialogOpen, setEndDialogOpen] = useState(false);
+    const [editingName, setEditingName] = useState(false);
+    const [tournamentName, setTournamentName] = useState('');
 
     const {
         currentTournament,
@@ -30,6 +32,7 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
         startTournament,
         endTournament,
         resetTournament,
+        renameTournament,
         setFairRoll
     } = useTournament();
 
@@ -40,16 +43,34 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
     const tournament = currentTournament;
     const activePlayers = tournament.players.filter(p => p.active);
 
+    const handleEditName = () => {
+        setTournamentName(tournament.name);
+        setEditingName(true);
+    };
+
+    const handleSaveName = () => {
+        if (tournamentName.trim()) {
+            renameTournament(tournamentName.trim());
+        }
+        setEditingName(false);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingName(false);
+        setTournamentName('');
+    };
+
     const getMinPlayersForFormat = (format: GameFormat): number => {
         const config = tournament.formatConfigs.find(c => c.format === format);
         return config ? config.playersPerTeam * 2 * config.gamesCount : 0;
     };
 
     const getTotalMinPlayers = (): number => {
-        return Math.max(...tournament.formatConfigs
-            .filter(config => config.gamesCount > 0)
-            .map(config => config.playersPerTeam * 2 * config.gamesCount)
-        );
+        const activeConfigs = tournament.formatConfigs.filter(config => config.gamesCount > 0);
+        if (activeConfigs.length === 0) {
+            return 0;
+        }
+        return Math.max(...activeConfigs.map(config => config.playersPerTeam * 2 * config.gamesCount));
     };
 
     const canStartTournament = (): boolean => {
@@ -69,6 +90,12 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
     const hasGamesInProgress = () => {
         return tournament.rounds.some(round =>
             round.games.some(game => game.scoreA !== null || game.scoreB !== null)
+        );
+    };
+
+    const hasAnyCompletedRounds = () => {
+        return tournament.rounds.some(round =>
+            round.games.length > 0 && round.games.every(game => game.scoreA !== null && game.scoreB !== null)
         );
     };
 
@@ -104,6 +131,40 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                                <h4 className="font-medium mb-2">Turniername</h4>
+                                {editingName ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={tournamentName}
+                                            onChange={(e) => setTournamentName(e.target.value)}
+                                            placeholder="Turniername eingeben..."
+                                            className="flex-1"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleSaveName();
+                                                if (e.key === 'Escape') handleCancelEdit();
+                                            }}
+                                            autoFocus
+                                        />
+                                        <Button size="sm" onClick={handleSaveName}>
+                                            <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg font-medium">{tournament.name}</span>
+                                        <Button size="sm" variant="ghost" onClick={handleEditName}>
+                                            <Edit2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="flex items-center justify-between">
                             <div>
                                 <h4 className="font-medium">Fair Roll aktivieren</h4>
@@ -199,7 +260,7 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
                                 <DialogTrigger asChild>
                                     <Button
                                         variant="outline"
-                                        disabled={!tournament.started}
+                                        disabled={!tournament.started || hasAnyCompletedRounds()}
                                     >
                                         <RotateCcw className="h-4 w-4 mr-2" />
                                         Reset
@@ -209,12 +270,15 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
                                     <DialogHeader>
                                         <DialogTitle>Turnier zurücksetzen</DialogTitle>
                                         <DialogDescription>
-                                            Möchten Sie das aktuelle Turnier wirklich zurücksetzen? Alle Spiele und Ergebnisse gehen verloren.
+                                            {hasAnyCompletedRounds()
+                                                ? "Das Turnier kann nicht zurückgesetzt werden, da bereits Runden abgeschlossen wurden. Ein Reset ist nur möglich, wenn noch keine Runde vollständig gespielt wurde."
+                                                : "Möchten Sie das aktuelle Turnier wirklich zurücksetzen? Alle Spiele und Ergebnisse gehen verloren."
+                                            }
                                         </DialogDescription>
                                     </DialogHeader>
                                     <DialogFooter>
                                         <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Abbrechen</Button>
-                                        <Button onClick={handleResetTournament}>Zurücksetzen</Button>
+                                        <Button onClick={handleResetTournament} disabled={hasAnyCompletedRounds()}>Zurücksetzen</Button>
                                     </DialogFooter>
                                 </DialogContent>
                             </Dialog>

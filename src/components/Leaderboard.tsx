@@ -72,8 +72,10 @@ function TournamentHistorySection() {
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="text-right text-sm text-muted-foreground">
-                                            <p>{tournament.rounds.length} Runden</p>
-                                            <p>{tournament.players.length} Spieler</p>
+                                            <p>{tournament.rounds.filter(round =>
+                                                round.games.length > 0 && round.games.every(game => game.scoreA !== null && game.scoreB !== null)
+                                            ).length} Runden</p>
+                                            <p>{tournament.players.filter(p => p.active).length} Spieler</p>
                                         </div>
                                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                     </div>
@@ -87,8 +89,13 @@ function TournamentHistorySection() {
     }
 
     const sortedPlayers = selectedTournament.players
+        .filter(p => p.active)
         .slice()
         .sort((a, b) => b.points - a.points);
+
+    const completedRoundsCount = selectedTournament.rounds.filter(round =>
+        round.games.length > 0 && round.games.every(game => game.scoreA !== null && game.scoreB !== null)
+    ).length;
 
     return (
         <div className="space-y-4">
@@ -107,7 +114,7 @@ function TournamentHistorySection() {
                     <CardDescription>
                         {new Date(selectedTournament.createdAt).toLocaleDateString('de-DE')} -
                         {selectedTournament.endedAt && new Date(selectedTournament.endedAt).toLocaleDateString('de-DE')} •
-                        {selectedTournament.rounds.length} Runden • {selectedTournament.players.length} Spieler
+                        {completedRoundsCount} Runden • {selectedTournament.players.filter(p => p.active).length} Spieler
                     </CardDescription>
                 </CardHeader>
             </Card>
@@ -415,16 +422,16 @@ export function Leaderboard() {
                                 <div className="space-y-3">
                                     {sortedPlayersByPoints.map((player, index) => (
                                         <div key={player.id} className={`p-4 rounded-lg border ${getRankStyle(getPlayerRank(index, sortedPlayersByPoints))}`}>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
                                                     {getRankIcon(getPlayerRank(index, sortedPlayersByPoints))}
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex items-center justify-center w-8 h-8 bg-primary/10 rounded-full text-sm font-medium">
+                                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                        <div className="flex items-center justify-center w-8 h-8 bg-primary/10 rounded-full text-sm font-medium flex-shrink-0">
                                                             {getPlayerRank(index, sortedPlayersByPoints)}
                                                         </div>
-                                                        <div>
-                                                            <h4 className="font-medium">{player.name} #{player.number}</h4>
-                                                            <p className="text-sm text-muted-foreground">
+                                                        <div className="min-w-0 flex-1">
+                                                            <h4 className="font-medium truncate">{player.name} #{player.number}</h4>
+                                                            <p className="text-sm text-muted-foreground truncate">
                                                                 {player.gamesPlayed.total} Spiele gespielt • {player.active ? 'Aktiv' : 'Inaktiv'}
                                                             </p>
                                                             <div className="flex items-center gap-2 mt-1">
@@ -434,9 +441,9 @@ export function Leaderboard() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-2xl font-bold text-primary">{player.points}</div>
-                                                    <div className="text-sm text-muted-foreground">
+                                                <div className="text-right flex-shrink-0">
+                                                    <div className="text-xl sm:text-2xl font-bold text-primary">{player.points}</div>
+                                                    <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                                                         {player.gamesPlayed.total > 0
                                                             ? `Ø ${(player.points / player.gamesPlayed.total).toFixed(1)} Punkte/Spiel`
                                                             : 'Keine Spiele'

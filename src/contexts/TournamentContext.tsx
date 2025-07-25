@@ -14,6 +14,7 @@ interface TournamentContextType {
     endTournament: () => void;
     createNewTournament: (name: string) => void;
     resetTournament: () => void;
+    renameTournament: (name: string) => void;
     generateNextRound: () => void;
     updateGameScore: (gameId: string, scoreA: number, scoreB: number) => void;
     setFairRoll: (fairRoll: boolean) => void;
@@ -32,11 +33,11 @@ type TournamentAction =
     | { type: 'END_TOURNAMENT' }
     | { type: 'CREATE_NEW_TOURNAMENT'; payload: { name: string } }
     | { type: 'RESET_TOURNAMENT' }
+    | { type: 'RENAME_TOURNAMENT'; payload: { name: string } }
     | { type: 'GENERATE_NEXT_ROUND' }
     | { type: 'UPDATE_GAME_SCORE'; payload: { gameId: string; scoreA: number; scoreB: number } }
     | { type: 'SET_FAIR_ROLL'; payload: boolean }
     | { type: 'LOAD_TOURNAMENT'; payload: Tournament }
-    | { type: 'LOAD_HISTORY'; payload: TournamentHistory }
     | { type: 'LOAD_HISTORY'; payload: TournamentHistory };
 
 const defaultPlayers: Player[] = [
@@ -75,7 +76,19 @@ const defaultFormatConfigs: FormatConfig[] = [
 ];
 
 function generateId(): string {
-    return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+function isRoundCompleted(round: Round): boolean {
+    return round.games.length > 0 && round.games.every(game => game.scoreA !== null && game.scoreB !== null);
+}
+
+function getCompletedRounds(tournament: Tournament): Round[] {
+    return tournament.rounds.filter(isRoundCompleted);
+}
+
+function hasAnyCompletedRounds(tournament: Tournament): boolean {
+    return tournament.rounds.some(isRoundCompleted);
 }
 
 const initialTournament: Tournament = {
@@ -194,13 +207,27 @@ function createFairTeams(players: Player[], playersPerTeam: number, gamesCount: 
 }
 
 function calculatePoints(tournament: Tournament): Tournament {
-    const updatedPlayers = tournament.players.map(player => ({ ...player, points: 0 }));
+    const updatedPlayers = tournament.players.map(player => ({
+        ...player,
+        points: 0,
+        gamesPlayed: { '2vs2': 0, '3vs3': 0, '4+1vs4+1': 0, total: 0 }
+    }));
 
-    tournament.rounds.forEach(round => {
+    const completedRounds = getCompletedRounds(tournament);
+
+    completedRounds.forEach(round => {
         round.games.forEach(game => {
             if (game.scoreA !== null && game.scoreB !== null) {
                 const allPlayersA = [...game.teamA, ...game.substitutesA];
                 const allPlayersB = [...game.teamB, ...game.substitutesB];
+
+                [...allPlayersA, ...allPlayersB].forEach(player => {
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
+                    if (playerIndex !== -1) {
+                        updatedPlayers[playerIndex].gamesPlayed[game.format]++;
+                        updatedPlayers[playerIndex].gamesPlayed.total++;
+                    }
+                });
 
                 allPlayersA.forEach(player => {
                     const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
@@ -325,30 +352,11 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 completed: false,
             };
 
-            const updatedPlayers = state.players.map(player => {
-                const newGamesPlayed = { ...player.gamesPlayed };
-                allGames.forEach(game => {
-                    const isInGame =
-                        game.teamA.some(p => p.id === player.id) ||
-                        game.teamB.some(p => p.id === player.id) ||
-                        game.substitutesA.some(p => p.id === player.id) ||
-                        game.substitutesB.some(p => p.id === player.id);
-
-                    if (isInGame) {
-                        newGamesPlayed[game.format]++;
-                        newGamesPlayed.total++;
-                    }
-                });
-
-                return { ...player, gamesPlayed: newGamesPlayed };
-            });
-
             return {
                 ...state,
                 started: true,
                 rounds: [round],
                 currentRound: 1,
-                players: updatedPlayers,
                 status: 'running' as TournamentStatus,
             };
         }
@@ -394,29 +402,10 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 completed: false,
             };
 
-            const updatedPlayers = state.players.map(player => {
-                const newGamesPlayed = { ...player.gamesPlayed };
-                allGames.forEach(game => {
-                    const isInGame =
-                        game.teamA.some(p => p.id === player.id) ||
-                        game.teamB.some(p => p.id === player.id) ||
-                        game.substitutesA.some(p => p.id === player.id) ||
-                        game.substitutesB.some(p => p.id === player.id);
-
-                    if (isInGame) {
-                        newGamesPlayed[game.format]++;
-                        newGamesPlayed.total++;
-                    }
-                });
-
-                return { ...player, gamesPlayed: newGamesPlayed };
-            });
-
             return {
                 ...state,
                 rounds: [...state.rounds, newRound],
                 currentRound: nextRoundNumber,
-                players: updatedPlayers,
             };
         }
 
@@ -452,6 +441,9 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
 
         case 'LOAD_TOURNAMENT':
             return action.payload;
+
+        case 'RENAME_TOURNAMENT':
+            return { ...state, name: action.payload.name };
 
         default:
             return state;
@@ -640,6 +632,10 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'RESET_TOURNAMENT' });
     };
 
+    const renameTournament = (name: string) => {
+        dispatch({ type: 'RENAME_TOURNAMENT', payload: { name } });
+    };
+
     const generateNextRound = () => {
         dispatch({ type: 'GENERATE_NEXT_ROUND' });
     };
@@ -732,6 +728,7 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
                 endTournament,
                 createNewTournament,
                 resetTournament,
+                renameTournament,
                 generateNextRound,
                 updateGameScore,
                 setFairRoll,
