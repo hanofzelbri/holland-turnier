@@ -60,17 +60,14 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
         setTournamentName('');
     };
 
-    const getMinPlayersForFormat = (format: GameFormat): number => {
-        const config = tournament.formatConfigs.find(c => c.format === format);
-        return config ? config.playersPerTeam * 2 * config.gamesCount : 0;
-    };
-
     const getTotalMinPlayers = (): number => {
         const activeConfigs = tournament.formatConfigs.filter(config => config.gamesCount > 0);
         if (activeConfigs.length === 0) {
             return 0;
         }
-        return Math.max(...activeConfigs.map(config => config.playersPerTeam * 2 * config.gamesCount));
+        return activeConfigs.reduce((total, config) =>
+            total + (config.playersPerTeam * 2 * config.gamesCount), 0
+        );
     };
 
     const canStartTournament = (): boolean => {
@@ -224,10 +221,10 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
                                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                                     <span>{config.playersPerTeam} Spieler pro Team</span>
                                     <span>
-                                        Min. {getMinPlayersForFormat(config.format)} Spieler
-                                        {config.gamesCount > 0 && activePlayers.length < getMinPlayersForFormat(config.format) && (
+                                        Min. {config.playersPerTeam * 2 * config.gamesCount} Spieler
+                                        {config.gamesCount > 0 && activePlayers.length < (config.playersPerTeam * 2 * config.gamesCount) && (
                                             <span className="text-red-500 ml-1">
-                                                (fehlen {getMinPlayersForFormat(config.format) - activePlayers.length})
+                                                (fehlen {(config.playersPerTeam * 2 * config.gamesCount) - activePlayers.length})
                                             </span>
                                         )}
                                     </span>
@@ -241,7 +238,10 @@ export function Tournament({ onNavigateToGames }: TournamentProps) {
                             <div>
                                 <p className="font-medium">Aktive Spieler: {activePlayers.length}</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Mindestens {getTotalMinPlayers()} Spieler benötigt
+                                    {getTotalMinPlayers() > 0
+                                        ? `Mindestens ${getTotalMinPlayers()} Spieler benötigt`
+                                        : 'Wähle mindestens ein Spielformat aus'
+                                    }
                                 </p>
                             </div>
                         </div>

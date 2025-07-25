@@ -87,10 +87,6 @@ function getCompletedRounds(tournament: Tournament): Round[] {
     return tournament.rounds.filter(isRoundCompleted);
 }
 
-function hasAnyCompletedRounds(tournament: Tournament): boolean {
-    return tournament.rounds.some(isRoundCompleted);
-}
-
 const initialTournament: Tournament = {
     id: generateId(),
     name: 'Neues Turnier',
@@ -169,6 +165,7 @@ function createFairTeams(players: Player[], playersPerTeam: number, gamesCount: 
 
     const games: Game[] = [];
     const totalPlayersNeeded = gamesCount * playersPerTeam * 2;
+    const remainingPlayers = shuffledPlayers.slice(totalPlayersNeeded);
 
     for (let gameIndex = 0; gameIndex < gamesCount; gameIndex++) {
         const teamA: Player[] = [];
@@ -176,6 +173,7 @@ function createFairTeams(players: Player[], playersPerTeam: number, gamesCount: 
         const substitutesA: Player[] = [];
         const substitutesB: Player[] = [];
 
+        // Assign main team players
         for (let i = 0; i < playersPerTeam; i++) {
             const playerIndexA = gameIndex * playersPerTeam * 2 + i;
             const playerIndexB = gameIndex * playersPerTeam * 2 + playersPerTeam + i;
@@ -184,11 +182,17 @@ function createFairTeams(players: Player[], playersPerTeam: number, gamesCount: 
             if (playerIndexB < shuffledPlayers.length) teamB.push(shuffledPlayers[playerIndexB]);
         }
 
-        const remainingPlayers = shuffledPlayers.slice(totalPlayersNeeded);
-        const halfRemaining = Math.ceil(remainingPlayers.length / 2);
+        // Distribute substitute players evenly across games
+        const substitutesPerGame = Math.floor(remainingPlayers.length / gamesCount);
+        const extraSubstitutes = remainingPlayers.length % gamesCount;
 
-        substitutesA.push(...remainingPlayers.slice(0, halfRemaining));
-        substitutesB.push(...remainingPlayers.slice(halfRemaining));
+        const startIndex = gameIndex * substitutesPerGame + Math.min(gameIndex, extraSubstitutes);
+        const endIndex = startIndex + substitutesPerGame + (gameIndex < extraSubstitutes ? 1 : 0);
+        const gameSubstitutes = remainingPlayers.slice(startIndex, endIndex);
+
+        const halfSubstitutes = Math.ceil(gameSubstitutes.length / 2);
+        substitutesA.push(...gameSubstitutes.slice(0, halfSubstitutes));
+        substitutesB.push(...gameSubstitutes.slice(halfSubstitutes));
 
         games.push({
             id: generateId(),
@@ -322,27 +326,13 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 return state;
             }
 
-            let usedPlayerIds: Set<string> = new Set();
-            let availablePlayers = [...activePlayers];
-
             activeFormatConfigs.forEach(config => {
                 if (config.gamesCount > 0) {
-                    const playersNeededForFormat = config.playersPerTeam * 2 * config.gamesCount;
-                    const formatPlayers = availablePlayers.slice(0, playersNeededForFormat);
-
-                    if (formatPlayers.length >= config.playersPerTeam * 2) {
-                        const games = createFairTeams(formatPlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
-                        games.forEach(game => {
-                            game.round = roundNumber;
-                            allGames.push(game);
-
-                            [...game.teamA, ...game.teamB].forEach(player => {
-                                usedPlayerIds.add(player.id);
-                            });
-                        });
-
-                        availablePlayers = availablePlayers.filter(p => !usedPlayerIds.has(p.id));
-                    }
+                    const games = createFairTeams(activePlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
+                    games.forEach(game => {
+                        game.round = roundNumber;
+                        allGames.push(game);
+                    });
                 }
             });
 
@@ -372,27 +362,13 @@ function tournamentReducer(state: Tournament, action: TournamentAction): Tournam
                 return state;
             }
 
-            let usedPlayerIds: Set<string> = new Set();
-            let availablePlayers = [...activePlayers];
-
             activeFormatConfigs.forEach(config => {
                 if (config.gamesCount > 0) {
-                    const playersNeededForFormat = config.playersPerTeam * 2 * config.gamesCount;
-                    const formatPlayers = availablePlayers.slice(0, playersNeededForFormat);
-
-                    if (formatPlayers.length >= config.playersPerTeam * 2) {
-                        const games = createFairTeams(formatPlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
-                        games.forEach(game => {
-                            game.round = nextRoundNumber;
-                            allGames.push(game);
-
-                            [...game.teamA, ...game.teamB].forEach(player => {
-                                usedPlayerIds.add(player.id);
-                            });
-                        });
-
-                        availablePlayers = availablePlayers.filter(p => !usedPlayerIds.has(p.id));
-                    }
+                    const games = createFairTeams(activePlayers, config.playersPerTeam, config.gamesCount, config.format, state.fairRoll);
+                    games.forEach(game => {
+                        game.round = nextRoundNumber;
+                        allGames.push(game);
+                    });
                 }
             });
 
